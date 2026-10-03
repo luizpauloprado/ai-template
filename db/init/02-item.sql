@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS item (
+    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    details    JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
