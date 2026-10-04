@@ -9,7 +9,7 @@ description: Use when changing the Gemini integration in app/adapters/ai/, addin
 
 | File | Role |
 |---|---|
-| `app/adapters/ai/gemini_adapter.py` | `create_client`, `to_sdk_config`, `GeminiPricing`, `_log_call`, `ask`, `ask_with_config`, `extract_invoice` |
+| `app/adapters/ai/gemini_adapter.py` | `create_client` + `GeminiRetry` (timeout/retry), `to_sdk_config`, `GeminiPricing`, `_log_call`, `ask`, `ask_with_config`, `extract_invoice` |
 | `app/domain/models.py` | `GeneratedText` (output), `GenerationConfig` (provider-agnostic options) |
 | `app/domain/ports.py` | `Ask`, `AskWithConfig` |
 | `app/wires/inbound/ai.py` | `AskIn`, `AskWithConfigIn` (validation bounds) + `to_generation_config` |
@@ -24,7 +24,8 @@ description: Use when changing the Gemini integration in app/adapters/ai/, addin
 - MUST: convert SDK responses to domain models (`_to_generated_text`) and never return SDK types. Handle `None` (`response.text or ""`, `response.model_version or model`).
 - MUST: keep `GenerationConfig` provider-agnostic. Field names match `types.GenerateContentConfig` so that `to_sdk_config` stays `GenerateContentConfig(**config.model_dump(exclude_none=True))`.
 - MUST NOT: import `google.genai` outside `app/adapters/ai/`, `app/dependencies/`, `app/lifespan.py` and `app/main.py`.
-- MUST NOT: catch `genai_errors.APIError`. `app/main.py` maps it to 502.
+- MUST NOT: catch `genai_errors.APIError`. `app/main.py` maps it: 5xx/429 → 503 + `Retry-After`, other → 502; `httpx.TimeoutException` → 504.
+- MUST NOT: write retry loops (in adapters or services). Timeout and retry (exponential backoff + jitter on 408/429/5xx/network errors) are configured once in `create_client` via `GeminiRetry` → `types.HttpOptions`, from the `GEMINI_TIMEOUT_SECONDS` / `GEMINI_RETRY_*` settings. Retries are logged by the SDK logger `google_genai._api_client`.
 - Services may normalize input (e.g. `prompt.strip()`), but prompt templates/business prompts belong in the service, not in the adapter.
 
 ## Recipe: add a generation option (e.g. `presence_penalty`)

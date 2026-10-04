@@ -12,8 +12,35 @@ from app.domain.models import GeneratedText, GenerationConfig, Invoice
 logger = logging.getLogger(__name__)
 
 
-def create_client(api_key: str) -> genai.Client:
-    return genai.Client(api_key=api_key)
+# Erros transitórios: timeout, rate limit/cota, modelo sobrecarregado e afins.
+RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504]
+
+
+class GeminiRetry(BaseModel):
+    """Timeout por tentativa e retry com backoff exponencial + jitter (feito pelo próprio SDK)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    timeout_seconds: float = 60.0
+    attempts: int = 3  # inclui a primeira chamada
+    initial_delay_seconds: float = 1.0
+    max_delay_seconds: float = 10.0
+
+
+def to_http_options(retry: GeminiRetry) -> types.HttpOptions:
+    return types.HttpOptions(
+        timeout=int(retry.timeout_seconds * 1000),  # o SDK usa milissegundos
+        retry_options=types.HttpRetryOptions(
+            attempts=retry.attempts,
+            initial_delay=retry.initial_delay_seconds,
+            max_delay=retry.max_delay_seconds,
+            http_status_codes=RETRYABLE_STATUS_CODES,
+        ),
+    )
+
+
+def create_client(api_key: str, retry: GeminiRetry | None = None) -> genai.Client:
+    return genai.Client(api_key=api_key, http_options=to_http_options(retry or GeminiRetry()))
 
 
 def to_sdk_config(config: GenerationConfig) -> types.GenerateContentConfig:
@@ -58,6 +85,7 @@ def _log_call(
     response: types.GenerateContentResponse,
     info: str,
 ) -> None:
+    # inclui o tempo das tentativas anteriores e das esperas do retry
     elapsed = time.perf_counter() - started
     usage = _usage_info(response, pricing)
     logger.info("gemini %s model=%s %s %s took %.2fs", operation, model, info, usage, elapsed)

@@ -39,9 +39,18 @@ async def test_get_sample_without_api_key_returns_503(client: AsyncClient) -> No
     assert response.status_code == 503
 
 
-async def test_get_sample_upstream_error_returns_502(app: FastAPI, client: AsyncClient) -> None:
+async def test_get_sample_provider_down_returns_503(app: FastAPI, client: AsyncClient) -> None:
     async def broken(pdf: bytes, prompt: str) -> Invoice:
         raise genai_errors.ServerError(500, {"error": {"message": "down"}})
+
+    app.dependency_overrides[get_extract_invoice] = lambda: broken
+
+    assert (await client.get("/sample/extract-invoice")).status_code == 503
+
+
+async def test_get_sample_client_error_returns_502(app: FastAPI, client: AsyncClient) -> None:
+    async def broken(pdf: bytes, prompt: str) -> Invoice:
+        raise genai_errors.ClientError(400, {"error": {"message": "bad"}})
 
     app.dependency_overrides[get_extract_invoice] = lambda: broken
 

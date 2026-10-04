@@ -20,14 +20,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.external_api_base_url, settings.http_timeout_seconds
     )
     app.state.gemini_client = (
-        gemini_adapter.create_client(settings.gemini_api_key) if settings.gemini_api_key else None
+        gemini_adapter.create_client(
+            settings.gemini_api_key,
+            gemini_adapter.GeminiRetry(
+                timeout_seconds=settings.gemini_timeout_seconds,
+                attempts=settings.gemini_retry_attempts,
+                initial_delay_seconds=settings.gemini_retry_initial_delay_seconds,
+                max_delay_seconds=settings.gemini_retry_max_delay_seconds,
+            ),
+        )
+        if settings.gemini_api_key
+        else None
     )
     logger.info("starting %s (env=%s)", settings.app_name, settings.app_env)
     logger.info("external api: %s", settings.external_api_base_url)
     if app.state.gemini_client is None:
         logger.warning("GEMINI_API_KEY ausente: endpoints de IA vão responder 503")
     else:
-        logger.info("gemini configurado (model=%s)", settings.gemini_model)
+        logger.info(
+            "gemini configurado (model=%s timeout=%.0fs attempts=%d)",
+            settings.gemini_model,
+            settings.gemini_timeout_seconds,
+            settings.gemini_retry_attempts,
+        )
     try:
         yield
     finally:

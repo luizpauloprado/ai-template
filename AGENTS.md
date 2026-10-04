@@ -88,6 +88,8 @@ HTTP ◀─ controller ◀─ wire-out (Pydantic) ◀─ service ◀─ domain m
 | Delete port returns `False` | Controller | 404 |
 | Invalid body/path/query | Pydantic/FastAPI automatically | 422 |
 | `httpx.HTTPError` or `google.genai.errors.APIError` escapes | Handler in `app/main.py` (logs the full error, body has `detail` + `request_id`) | 502 |
+| Gemini `ServerError` (5xx) or 429 left after the SDK retries | `handle_gemini_error` in `app/main.py` (adds `Retry-After`) | 503 |
+| `httpx.TimeoutException` (external API or Gemini) | `handle_upstream_timeout` in `app/main.py` | 504 |
 | Optional resource missing (no `GEMINI_API_KEY`) | `get_gemini_client` in `app/dependencies/resources.py` | 503 |
 | Health has a component `down` | `health_controller` | 503 |
 

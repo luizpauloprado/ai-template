@@ -1,8 +1,12 @@
+import httpx
+import pytest
 from fastapi import FastAPI
+from google.genai import errors as genai_errors
 from httpx import AsyncClient
 
 from app.dependencies import get_ask, get_ask_with_config
-from app.domain.models import GenerationConfig
+from app.domain.models import GeneratedText, GenerationConfig
+from app.domain.ports import Ask
 from tests.fakes import fake_ask, fake_ask_with_config
 
 
@@ -59,3 +63,48 @@ async def test_ask_with_config_without_api_key_returns_503(client: AsyncClient) 
     response = await client.post("/ai/ask/advanced", json={"prompt": "hi"})
 
     assert response.status_code == 503
+
+
+def failing_ask(exc: Exception) -> Ask:
+    async def ask(prompt: str) -> GeneratedText:
+        raise exc
+
+    return ask
+
+
+def api_error(cls: type[genai_errors.APIError], code: int) -> genai_errors.APIError:
+    return cls(code, {"error": {"code": code, "message": "boom", "status": "X"}})
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [api_error(genai_errors.ServerError, 503), api_error(genai_errors.ClientError, 429)],
+)
+async def test_ask_provider_unavailable_returns_503_with_retry_after(
+    app: FastAPI, client: AsyncClient, exc: Exception
+) -> None:
+    app.dependency_overrides[get_ask] = lambda: failing_ask(exc)
+
+    response = await client.post("/ai/ask", json={"prompt": "hi"})
+
+    assert response.status_code == 503
+    assert int(response.headers["retry-after"]) >= 1
+    assert response.json()["request_id"] == response.headers["x-request-id"]
+
+
+async def test_ask_client_error_returns_502(app: FastAPI, client: AsyncClient) -> None:
+    exc = api_error(genai_errors.ClientError, 400)
+    app.dependency_overrides[get_ask] = lambda: failing_ask(exc)
+
+    response = await client.post("/ai/ask", json={"prompt": "hi"})
+
+    assert response.status_code == 502
+    assert "retry-after" not in response.headers
+
+
+async def test_ask_timeout_returns_504(app: FastAPI, client: AsyncClient) -> None:
+    app.dependency_overrides[get_ask] = lambda: failing_ask(httpx.ReadTimeout("slow"))
+
+    response = await client.post("/ai/ask", json={"prompt": "hi"})
+
+    assert response.status_code == 504

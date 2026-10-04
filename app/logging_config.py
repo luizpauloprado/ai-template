@@ -40,6 +40,8 @@ def configure_logging(level: str) -> None:
                 "uvicorn.access": {"level": "WARNING"},
                 # avisos do SDK do Gemini no mesmo formato (sem isso saem crus no stderr)
                 "google_genai": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+                # cada retry do SDK (503/429/timeout) é logado em INFO por este logger
+                "google_genai._api_client": {"level": "INFO"},
             },
         }
     )

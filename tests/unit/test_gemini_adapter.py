@@ -2,14 +2,21 @@ import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
+import respx
+from google.genai import errors as genai_errors
 from google.genai import types
 
 from app.adapters.ai.gemini_adapter import (
+    RETRYABLE_STATUS_CODES,
     GeminiPricing,
+    GeminiRetry,
     ask,
     ask_with_config,
+    create_client,
     extract_invoice,
+    to_http_options,
     to_sdk_config,
 )
 from app.domain.models import GenerationConfig, Invoice
@@ -159,3 +166,63 @@ async def test_call_without_usage_metadata_logs_zero_tokens(
     [message] = gemini_log_messages(caplog)
     assert "tokens_in=0 tokens_out=0 tokens_thinking=0 tokens_cached=0 tokens_total=0" in message
     assert "cost_usd=0.000000" in message
+
+
+def test_to_http_options_sets_timeout_and_retry() -> None:
+    options = to_http_options(
+        GeminiRetry(timeout_seconds=30, attempts=4, initial_delay_seconds=2, max_delay_seconds=8)
+    )
+
+    assert options.timeout == 30_000
+    assert options.retry_options == types.HttpRetryOptions(
+        attempts=4, initial_delay=2, max_delay=8, http_status_codes=RETRYABLE_STATUS_CODES
+    )
+
+
+# Retry de verdade pelo SDK, com o HTTP do Gemini mockado (o jitter do SDK soma até 1s por espera).
+GENERATE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-x:generateContent"
+FAST_RETRY = GeminiRetry(attempts=3, initial_delay_seconds=0.01, max_delay_seconds=0.01)
+OK_BODY = {
+    "candidates": [{"content": {"role": "model", "parts": [{"text": "oi"}]}}],
+    "modelVersion": "gemini-x-001",
+}
+
+
+def unavailable() -> httpx.Response:
+    return httpx.Response(
+        503, json={"error": {"code": 503, "message": "overloaded", "status": "UNAVAILABLE"}}
+    )
+
+
+@respx.mock
+async def test_client_retries_transient_errors() -> None:
+    route = respx.post(GENERATE_URL).mock(
+        side_effect=[unavailable(), unavailable(), httpx.Response(200, json=OK_BODY)]
+    )
+
+    generated = await ask(create_client("key", FAST_RETRY), "gemini-x", NO_PRICING, "prompt")
+
+    assert generated.text == "oi"
+    assert route.call_count == 3
+
+
+@respx.mock
+async def test_client_gives_up_after_max_attempts() -> None:
+    route = respx.post(GENERATE_URL).mock(return_value=unavailable())
+
+    with pytest.raises(genai_errors.ServerError):
+        await ask(create_client("key", FAST_RETRY), "gemini-x", NO_PRICING, "prompt")
+
+    assert route.call_count == 3
+
+
+@respx.mock
+async def test_client_does_not_retry_client_errors() -> None:
+    route = respx.post(GENERATE_URL).respond(
+        400, json={"error": {"code": 400, "message": "bad", "status": "INVALID_ARGUMENT"}}
+    )
+
+    with pytest.raises(genai_errors.ClientError):
+        await ask(create_client("key", FAST_RETRY), "gemini-x", NO_PRICING, "prompt")
+
+    assert route.call_count == 1

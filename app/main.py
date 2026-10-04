@@ -71,6 +71,36 @@ async def handle_upstream_http_error(request: Request, exc: Exception) -> JSONRe
     )
 
 
+async def handle_upstream_timeout(request: Request, exc: Exception) -> JSONResponse:
+    logger.error("upstream timeout on %s %s: %r", request.method, request.url.path, exc)
+    return JSONResponse(
+        status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+        content={
+            "detail": f"upstream timeout: {type(exc).__name__}",
+            "request_id": request_id_var.get(),
+        },
+    )
+
+
+async def handle_gemini_error(request: Request, exc: Exception) -> JSONResponse:
+    """Sobrecarga/cota (5xx, 429) que sobrou depois do retry do SDK vira 503 + Retry-After."""
+    code = exc.code if isinstance(exc, genai_errors.APIError) else None
+    if not isinstance(exc, genai_errors.ServerError) and code != 429:
+        return await handle_upstream_http_error(request, exc)
+    logger.error(
+        "ai provider unavailable on %s %s: %s", request.method, request.url.path, exc, exc_info=exc
+    )
+    retry_after = max(1, round(get_settings().gemini_retry_max_delay_seconds))
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        headers={"Retry-After": str(retry_after)},
+        content={
+            "detail": f"ai provider unavailable: {type(exc).__name__} {code}",
+            "request_id": request_id_var.get(),
+        },
+    )
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
@@ -84,7 +114,9 @@ def create_app() -> FastAPI:
     app.include_router(sample_controller.router)
 
     app.add_exception_handler(httpx.HTTPError, handle_upstream_http_error)
-    app.add_exception_handler(genai_errors.APIError, handle_upstream_http_error)
+    # o handler mais específico (pela MRO) vence: timeout -> 504 antes do HTTPError genérico
+    app.add_exception_handler(httpx.TimeoutException, handle_upstream_timeout)
+    app.add_exception_handler(genai_errors.APIError, handle_gemini_error)
     return app
 
 

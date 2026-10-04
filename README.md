@@ -45,7 +45,7 @@ Um port é só uma assinatura. Qualquer função compatível pode ser injetada: 
 
 ```
 app/
-  main.py                      create_app(), registro dos routers e handlers de erro (502)
+  main.py                      create_app(), registro dos routers e handlers de erro (502/503/504)
   lifespan.py                  cria/fecha pool, http client e client do Gemini (em app.state)
   config.py                    Settings (pydantic-settings, lê .env)
   domain/
@@ -116,6 +116,10 @@ cp .env.example .env
 | `GEMINI_MODEL`                                        | `gemini-3.1-flash-lite`                   | modelo usado                                                              |
 | `GEMINI_INPUT_PRICE_PER_MTOK`                         | `0`                                       | USD por 1M tokens de entrada, para estimar custo no log (0 = não calcula) |
 | `GEMINI_OUTPUT_PRICE_PER_MTOK`                        | `0`                                       | USD por 1M tokens de saída (inclui thinking), para estimar custo no log   |
+| `GEMINI_TIMEOUT_SECONDS`                              | `60`                                      | timeout de cada tentativa de chamada ao Gemini                            |
+| `GEMINI_RETRY_ATTEMPTS`                               | `3`                                       | tentativas em 408/429/5xx/timeout, incluindo a primeira (1 = sem retry)   |
+| `GEMINI_RETRY_INITIAL_DELAY_SECONDS`                  | `1`                                       | espera antes do 1º retry (backoff exponencial + jitter)                   |
+| `GEMINI_RETRY_MAX_DELAY_SECONDS`                      | `10`                                      | espera máxima entre tentativas; também vira o `Retry-After` do 503        |
 | `EXTERNAL_API_BASE_URL`                               | `https://jsonplaceholder.typicode.com`    | API externa                                                               |
 | `HTTP_TIMEOUT_SECONDS`                                | `10`                                      | timeout do httpx                                                          |
 | `HEALTH_CHECK_TIMEOUT_SECONDS`                        | `3`                                       | timeout de cada check do /health                                          |
@@ -187,7 +191,13 @@ curl localhost:8000/sample/extract-invoice
 #  "items":[{"code":"3065","quantity":2.0,"unit_price":29.99,...}],"totals":{"invoice_total":59.98,...}}
 ```
 
-Erros vindos de serviços externos (httpx ou Gemini) viram **502**. O corpo traz só o tipo do erro e o `request_id`; a mensagem completa fica no log:
+Erros vindos de serviços externos (httpx ou Gemini) viram **502**. O corpo traz só o tipo do erro e o `request_id`; a mensagem completa fica no log.
+
+Resiliência nas chamadas ao Gemini:
+
+- O próprio SDK retenta erros transitórios (408, 429, 5xx, timeout/conexão) com backoff exponencial + jitter, conforme `GEMINI_RETRY_*`. Erros do cliente (400, 401, 403, 404) não são retentados. Cada retry aparece no log (`google_genai._api_client`) com o `request_id`.
+- Se ainda falhar depois das tentativas: modelo sobrecarregado/cota (5xx ou 429) → **503** com header `Retry-After`; timeout → **504**; demais erros → **502**.
+- Pior caso de latência ≈ `GEMINI_RETRY_ATTEMPTS × GEMINI_TIMEOUT_SECONDS` + esperas. Mantenha abaixo do timeout do seu proxy/load balancer.
 
 ```json
 { "detail": "upstream error: ClientError", "request_id": "f78ed767bbe2" }
@@ -198,9 +208,8 @@ Erros vindos de serviços externos (httpx ou Gemini) viram **502**. O corpo traz
 ## Logs
 
 A API loga no console (stdout), no formato `data nível logger [request_id] mensagem`:
-gemini-3.1-flash-lite
 
-```gemini-3.1-flash-lite
+```
 INFO    app.lifespan [-] gemini configurado (model=gemini-3.8-flash)
 ERROR   app.main [f78ed767bbe2] upstream error on GET /sample/extract-invoice: 404 NOT_FOUND. {...'This model models/gemini-3.8-flash is no longer available...'}
 Traceback (most recent call last): ...
