@@ -17,20 +17,20 @@ HTTP ──▶ controller ──▶ wire-in (Pydantic) ──▶ service ──�
 HTTP ◀── controller ◀── wire-out (Pydantic) ◀── service ◀──────────┘
 ```
 
-| Camada | Pasta | Responsabilidade |
-|---|---|---|
-| **Controllers** | `app/controllers/` | Rotas FastAPI finas: recebem o wire-in, chamam o service e devolvem o wire-out. Traduzem `None` em 404. |
-| **Wires** | `app/wires/` | Contratos HTTP de entrada (`inbound/`) e saída (`outbound/`), com as funções `to_*_out()` que convertem a partir do domínio. |
-| **Services** | `app/services/` | Regras de negócio. Recebem os **ports** como parâmetros e nunca importam adapters. |
-| **Domain** | `app/domain/models.py` | Entidades (`Item`, `Post`, `HealthStatus`, …) imutáveis, sem nada de infraestrutura. |
-| **Ports** | `app/domain/ports.py` | Contratos como **aliases de `Callable`** (ex.: `GetItem = Callable[[int], Awaitable[Item \| None]]`). |
-| **Adapters** | `app/adapters/` | Tudo o que é impuro: `ai/gemini_adapter.py`, `db/postgres_adapter.py`, `db/item_repository.py`, `http/external_api_client.py`. |
-| **Composição** | `app/dependencies/` | Liga ports a adapters com `functools.partial(adapter, pool_ou_client)`. Cada provider `get_<port>()` tem um alias `<Port>Dep = Annotated[<Port>, Depends(get_<port>)]`, e os controllers injetam **só** por esses aliases. `resources.py` lê os recursos de `app.state` (`PoolDep`, `HttpClientDep`, `GeminiClientDep`); `ports/<feature>.py` monta cada port. |
-| **Lifespan** | `app/lifespan.py` | Cria e fecha o pool do Postgres, o `httpx.AsyncClient` e o client do Gemini, guardando-os em `app.state`. |
+| Camada          | Pasta                  | Responsabilidade                                                                                                                                                                                                                                                                                                                                               |
+| --------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Controllers** | `app/controllers/`     | Rotas FastAPI finas: recebem o wire-in, chamam o service e devolvem o wire-out. Traduzem `None` em 404.                                                                                                                                                                                                                                                        |
+| **Wires**       | `app/wires/`           | Contratos HTTP de entrada (`inbound/`) e saída (`outbound/`), com as funções `to_*_out()` que convertem a partir do domínio.                                                                                                                                                                                                                                   |
+| **Services**    | `app/services/`        | Regras de negócio. Recebem os **ports** como parâmetros e nunca importam adapters.                                                                                                                                                                                                                                                                             |
+| **Domain**      | `app/domain/models.py` | Entidades (`Item`, `Post`, `HealthStatus`, …) imutáveis, sem nada de infraestrutura.                                                                                                                                                                                                                                                                           |
+| **Ports**       | `app/domain/ports.py`  | Contratos como **aliases de `Callable`** (ex.: `GetItem = Callable[[int], Awaitable[Item \| None]]`).                                                                                                                                                                                                                                                          |
+| **Adapters**    | `app/adapters/`        | Tudo o que é impuro: `ai/gemini_adapter.py`, `db/postgres_adapter.py`, `db/item_repository.py`, `http/external_api_client.py`.                                                                                                                                                                                                                                 |
+| **Composição**  | `app/dependencies/`    | Liga ports a adapters com `functools.partial(adapter, pool_ou_client)`. Cada provider `get_<port>()` tem um alias `<Port>Dep = Annotated[<Port>, Depends(get_<port>)]`, e os controllers injetam **só** por esses aliases. `resources.py` lê os recursos de `app.state` (`PoolDep`, `HttpClientDep`, `GeminiClientDep`); `ports/<feature>.py` monta cada port. |
+| **Lifespan**    | `app/lifespan.py`      | Cria e fecha o pool do Postgres, o `httpx.AsyncClient` e o client do Gemini, guardando-os em `app.state`.                                                                                                                                                                                                                                                      |
 
 ### Por que "wire"?
 
-"Wire" é o formato do dado que **atravessa uma fronteira**, como em *wire format*. Há dois tipos:
+"Wire" é o formato do dado que **atravessa uma fronteira**, como em _wire format_. Há dois tipos:
 
 - **Wires HTTP** (`app/wires/`): o contrato público da sua API.
 - **Wires de adapter** (ex.: `app/adapters/http/external_api_schemas.py`): o formato de uma API de terceiros (com `userId` em camelCase etc.). Eles ficam **dentro do adapter**, que valida a resposta e devolve um modelo de domínio. Assim o formato de terceiros não vaza para o resto da aplicação.
@@ -107,16 +107,17 @@ cp .env.example .env
 # edite o .env e preencha GEMINI_API_KEY (opcional; sem ela, /ai/ask responde 503)
 ```
 
-| Variável | Default | Uso |
-|---|---|---|
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `app` | credenciais do container |
-| `POSTGRES_PORT` | `5432` | porta exposta no host |
-| `DATABASE_URL` | `postgresql://app:app@localhost:5432/app` | conexão da API. No compose, o host vira `db` automaticamente. |
-| `GEMINI_API_KEY` | vazio | chave do Gemini |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | modelo usado |
-| `EXTERNAL_API_BASE_URL` | `https://jsonplaceholder.typicode.com` | API externa |
-| `HTTP_TIMEOUT_SECONDS` | `10` | timeout do httpx |
-| `HEALTH_CHECK_TIMEOUT_SECONDS` | `3` | timeout de cada check do /health |
+| Variável                                              | Default                                   | Uso                                                             |
+| ----------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------- |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `app`                                     | credenciais do container                                        |
+| `POSTGRES_PORT`                                       | `5432`                                    | porta exposta no host                                           |
+| `DATABASE_URL`                                        | `postgresql://app:app@localhost:5432/app` | conexão da API. No compose, o host vira `db` automaticamente.   |
+| `GEMINI_API_KEY`                                      | vazio                                     | chave do Gemini                                                 |
+| `GEMINI_MODEL`                                        | `gemini-3.8-flash`                        | modelo usado                                                    |
+| `EXTERNAL_API_BASE_URL`                               | `https://jsonplaceholder.typicode.com`    | API externa                                                     |
+| `HTTP_TIMEOUT_SECONDS`                                | `10`                                      | timeout do httpx                                                |
+| `HEALTH_CHECK_TIMEOUT_SECONDS`                        | `3`                                       | timeout de cada check do /health                                |
+| `LOG_LEVEL`                                           | `INFO`                                    | nível dos logs no console (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 
 ---
 
@@ -148,17 +149,18 @@ make run         # uvicorn app.main:app --reload
 
 ## Endpoints
 
-| Método | Rota | Descrição |
-|---|---|---|
-| GET | `/health` | Status da API, do banco, do pgvector e do PGMQ. Responde 200 se tudo estiver `up` e 503 se algo estiver `down`. |
-| POST | `/ai/ask` | Gera texto com o Gemini |
-| POST | `/ai/ask/advanced` | Gera texto com parâmetros de geração (`system_instruction`, `temperature`, `top_p`, `top_k`, `max_output_tokens`, `stop_sequences`, `seed`) |
-| GET | `/external/posts/{id}` | Busca um post na API externa |
-| POST | `/items` | Cria um item |
-| GET | `/items?limit=20&offset=0` | Lista os itens (paginado) |
-| GET | `/items/{id}` | Busca um item |
-| PUT | `/items/{id}` | Substitui `details` e atualiza `updated_at` |
-| DELETE | `/items/{id}` | Remove um item |
+| Método | Rota                       | Descrição                                                                                                                                   |
+| ------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/health`                  | Status da API, do banco, do pgvector e do PGMQ. Responde 200 se tudo estiver `up` e 503 se algo estiver `down`.                             |
+| POST   | `/ai/ask`                  | Gera texto com o Gemini                                                                                                                     |
+| POST   | `/ai/ask/advanced`         | Gera texto com parâmetros de geração (`system_instruction`, `temperature`, `top_p`, `top_k`, `max_output_tokens`, `stop_sequences`, `seed`) |
+| GET    | `/external/posts/{id}`     | Busca um post na API externa                                                                                                                |
+| GET    | `/sample/extract-invoice`  | Lê a NF-e de exemplo (`app/services/invoice_sample.pdf`) e extrai os dados com o Gemini (JSON tipado)                                       |
+| POST   | `/items`                   | Cria um item                                                                                                                                |
+| GET    | `/items?limit=20&offset=0` | Lista os itens (paginado)                                                                                                                   |
+| GET    | `/items/{id}`              | Busca um item                                                                                                                               |
+| PUT    | `/items/{id}`              | Substitui `details` e atualiza `updated_at`                                                                                                 |
+| DELETE | `/items/{id}`              | Remove um item                                                                                                                              |
 
 ```bash
 curl localhost:8000/health
@@ -177,9 +179,37 @@ curl localhost:8000/external/posts/1
 
 curl -X POST localhost:8000/ai/ask -H 'content-type: application/json' \
   -d '{"prompt": "Explique arquitetura hexagonal em uma frase"}'
+
+curl localhost:8000/sample/extract-invoice
+# {"number":"000.001.234","series":"001","issuer":{"name":"EMPRESA EXEMPLO LTDA",...},
+#  "items":[{"code":"3065","quantity":2.0,"unit_price":29.99,...}],"totals":{"invoice_total":59.98,...}}
 ```
 
-Erros vindos de serviços externos (httpx ou Gemini) viram **502**.
+Erros vindos de serviços externos (httpx ou Gemini) viram **502**. O corpo traz só o tipo do erro e o `request_id`; a mensagem completa fica no log:
+
+```json
+{ "detail": "upstream error: ClientError", "request_id": "f78ed767bbe2" }
+```
+
+---
+
+## Logs
+
+A API loga no console (stdout), no formato `data nível logger [request_id] mensagem`:
+
+```
+INFO    app.lifespan [-] gemini configurado (model=gemini-3.8-flash)
+ERROR   app.main [f78ed767bbe2] upstream error on GET /sample/extract-invoice: 404 NOT_FOUND. {...'This model models/gemini-3.8-flash is no longer available...'}
+Traceback (most recent call last): ...
+ERROR   app.main [f78ed767bbe2] GET /sample/extract-invoice -> 502 (513.7 ms)
+INFO    app.adapters.http.external_api_client [cb7a5de30c13] http GET https://jsonplaceholder.typicode.com/posts/1 -> 200 (49.8 ms)
+INFO    app.main [cb7a5de30c13] GET /external/posts/1 -> 200 (52.1 ms)
+```
+
+- Toda requisição gera um `request_id`, devolvido no header `X-Request-ID` (se o cliente mandar esse header, o valor dele é reaproveitado). Para investigar um 502, procure no log pelo `request_id` do corpo da resposta.
+- Cada request é logado com status e duração: `INFO` para 2xx/3xx, `WARNING` para 4xx e `ERROR` para 5xx.
+- Também aparecem no log: startup/shutdown (`app.lifespan`), cada chamada ao Gemini com modelo e duração, cada chamada HTTP externa e os checks do `/health` que falharem.
+- `LOG_LEVEL=DEBUG` mostra também a resposta bruta do Gemini.
 
 ---
 
@@ -220,12 +250,14 @@ make test               # tudo
 make test-unit          # services, wires e adapters (sem I/O real)
 make test-acceptance    # endpoints via ASGI, com ports trocados por fakes
 make test-integration   # contra o Postgres real (requer `make db`)
+make test-gemini        # contra o Gemini real (requer GEMINI_API_KEY; fora do `make test`)
 make lint               # ruff + mypy
 ```
 
 - **Unit**: os services são testados com fakes de `tests/fakes.py`. O adapter HTTP é testado com `respx` e o do Gemini com `AsyncMock`.
 - **Acceptance**: `create_app()` + `httpx.ASGITransport`, trocando os ports com `app.dependency_overrides`. Valida status codes e os contratos JSON.
 - **Integration** (marker `integration`): usa o banco de verdade. Cada teste cria e apaga os próprios itens, então os dados que você já tem não são afetados. Se o Postgres não estiver acessível, esses testes são **pulados**.
+- **Gemini** (marker `gemini`): manda o `invoice_sample.pdf` real para o Gemini e confere os campos extraídos. Fica fora do `make test` (custa chamadas de API) e é pulado sem `GEMINI_API_KEY`.
 
 ---
 

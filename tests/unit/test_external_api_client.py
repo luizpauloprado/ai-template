@@ -1,3 +1,5 @@
+import logging
+
 import httpx
 import pytest
 import respx
@@ -30,3 +32,15 @@ async def test_fetch_post_500_raises() -> None:
     async with create_client(BASE_URL, timeout=1) as client:
         with pytest.raises(httpx.HTTPStatusError):
             await fetch_post(client, 1)
+
+
+@respx.mock
+async def test_requests_are_logged(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger="app")
+    respx.get(f"{BASE_URL}/posts/999").respond(status_code=404)
+    async with create_client(BASE_URL, timeout=1) as client:
+        await fetch_post(client, 999)
+
+    messages = [r.getMessage() for r in caplog.records if r.name.startswith("app.adapters.http")]
+    assert len(messages) == 1
+    assert messages[0].startswith(f"http GET {BASE_URL}/posts/999 -> 404")

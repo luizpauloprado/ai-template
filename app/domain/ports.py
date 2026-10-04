@@ -5,9 +5,17 @@ São apenas assinaturas de função. Qualquer função com a mesma assinatura
 """
 
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
-from app.domain.models import ComponentStatus, GeneratedText, GenerationConfig, Item, Post
+from app.domain.models import (
+    ComponentStatus,
+    GeneratedText,
+    GenerationConfig,
+    Invoice,
+    Item,
+    Post,
+)
 
 # Health
 CheckComponent = Callable[[], Awaitable[ComponentStatus]]
@@ -15,6 +23,10 @@ CheckComponent = Callable[[], Awaitable[ComponentStatus]]
 # AI
 Ask = Callable[[str], Awaitable[GeneratedText]]
 AskWithConfig = Callable[[str, GenerationConfig], Awaitable[GeneratedText]]
+ExtractInvoice = Callable[[bytes, str], Awaitable[Invoice]]  # (pdf, prompt)
+
+# Arquivos
+ReadFile = Callable[[Path], Awaitable[bytes]]
 
 # API externa
 FetchPost = Callable[[int], Awaitable[Post | None]]

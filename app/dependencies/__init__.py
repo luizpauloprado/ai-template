@@ -6,8 +6,16 @@ que os controllers usam para injetá-la. Nos testes, basta sobrescrever as funç
 `get_*` com `app.dependency_overrides`.
 """
 
-from app.dependencies.ports.ai import AskDep, AskWithConfigDep, get_ask, get_ask_with_config
+from app.dependencies.ports.ai import (
+    AskDep,
+    AskWithConfigDep,
+    ExtractInvoiceDep,
+    get_ask,
+    get_ask_with_config,
+    get_extract_invoice,
+)
 from app.dependencies.ports.external import FetchPostDep, get_fetch_post
+from app.dependencies.ports.files import ReadFileDep, get_read_file
 from app.dependencies.ports.health import HealthChecksDep, get_health_checks
 from app.dependencies.ports.items import (
     DeleteItemDep,
@@ -35,6 +43,7 @@ __all__ = [
     "AskDep",
     "AskWithConfigDep",
     "DeleteItemDep",
+    "ExtractInvoiceDep",
     "FetchPostDep",
     "GeminiClientDep",
     "GetItemDep",
@@ -43,12 +52,14 @@ __all__ = [
     "InsertItemDep",
     "ListItemsDep",
     "PoolDep",
+    "ReadFileDep",
     "SettingsDep",
     "UpdateItemDep",
     "get_ask",
     "get_ask_with_config",
     "get_db_pool",
     "get_delete_item",
+    "get_extract_invoice",
     "get_fetch_post",
     "get_gemini_client",
     "get_get_item",
@@ -56,5 +67,6 @@ __all__ = [
     "get_http_client",
     "get_insert_item",
     "get_list_items",
+    "get_read_file",
     "get_update_item",
 ]

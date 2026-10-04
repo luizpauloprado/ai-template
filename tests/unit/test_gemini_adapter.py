@@ -1,8 +1,13 @@
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from app.adapters.ai.gemini_adapter import ask, ask_with_config, to_sdk_config
-from app.domain.models import GenerationConfig
+import pytest
+from google.genai import types
+
+from app.adapters.ai.gemini_adapter import ask, ask_with_config, extract_invoice, to_sdk_config
+from app.domain.models import GenerationConfig, Invoice
+from tests.fakes import make_invoice
 
 
 def fake_client(text: str | None, model_version: str | None) -> AsyncMock:
@@ -49,3 +54,40 @@ async def test_ask_with_config_passes_config_to_client() -> None:
     client.aio.models.generate_content.assert_awaited_once_with(
         model="gemini-x", contents="prompt", config=to_sdk_config(config)
     )
+
+
+async def test_extract_invoice_maps_json_response() -> None:
+    invoice = make_invoice()
+    client = fake_client(invoice.model_dump_json(), "gemini-x-001")
+
+    extracted = await extract_invoice(client, "gemini-x", b"%PDF-1.4", "extraia")
+
+    assert extracted == invoice
+
+
+async def test_extract_invoice_sends_pdf_and_schema() -> None:
+    client = fake_client(make_invoice().model_dump_json(), "gemini-x-001")
+
+    await extract_invoice(client, "gemini-x", b"%PDF-1.4", "extraia")
+
+    kwargs = client.aio.models.generate_content.await_args.kwargs
+    assert kwargs["model"] == "gemini-x"
+    assert kwargs["contents"] == [
+        types.Part.from_bytes(data=b"%PDF-1.4", mime_type="application/pdf"),
+        "extraia",
+    ]
+    assert kwargs["config"].response_mime_type == "application/json"
+    assert kwargs["config"].response_schema is Invoice
+    assert kwargs["config"].temperature == 0
+
+
+async def test_extract_invoice_logs_call(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger="app")
+    client = fake_client(make_invoice().model_dump_json(), "gemini-x-001")
+
+    await extract_invoice(client, "gemini-x", b"%PDF-1.4", "extraia")
+
+    logger_name = "app.adapters.ai.gemini_adapter"
+    messages = [r.getMessage() for r in caplog.records if r.name == logger_name]
+    assert len(messages) == 1
+    assert "extract_invoice model=gemini-x pdf_bytes=8" in messages[0]

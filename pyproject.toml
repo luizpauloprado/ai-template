@@ -2,8 +2,10 @@
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+addopts = "-m 'not gemini'"
 markers = [
     "integration: testes que precisam do Postgres real (docker compose up db)",
+    "gemini: testes que chamam o Gemini real (make test-gemini; requer GEMINI_API_KEY)",
 ]
 
 [tool.ruff]

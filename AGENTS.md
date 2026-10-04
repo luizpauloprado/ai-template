@@ -11,6 +11,7 @@ It talks to:
 - **Gemini** via the `google-genai` SDK
 - **Postgres 17** with **pgvector** and **PGMQ**, via a `psycopg` 3 async pool (`psycopg_pool`)
 - an **external HTTP API** (JSONPlaceholder) via `httpx`
+- the **local filesystem** (files shipped with the app, e.g. `app/services/invoice_sample.pdf`)
 
 **The core rule:** Pydantic models are the only classes. Everything else is a plain function with type hints. A port is a `Callable` type alias. An adapter is a function whose first arguments are the resources it needs. `functools.partial` binds those resources, and FastAPI `Depends` injects the result.
 
@@ -26,6 +27,7 @@ It talks to:
 | `make lint` | `ruff check .` + `mypy app` |
 | `make test` | All tests |
 | `make test-unit` / `make test-acceptance` / `make test-integration` | One test layer |
+| `make test-gemini` | Tests against the real Gemini API (opt-in, excluded from `make test`, skipped without `GEMINI_API_KEY`) |
 
 `PY` defaults to `venv/bin/python`. Integration tests are **skipped** (not failed) when Postgres is unreachable.
 
@@ -44,12 +46,13 @@ HTTP ◀─ controller ◀─ wire-out (Pydantic) ◀─ service ◀─ domain m
 | Ports | `app/domain/ports.py` | Contracts as `Callable[..., Awaitable[...]]` aliases | `domain` only |
 | Services | `app/services/<feature>_service.py` | Business logic. Receive ports as parameters. | `domain` only |
 | Wires (HTTP) | `app/wires/inbound/<feature>.py`, `app/wires/outbound/<feature>.py` | Request/response contracts + `to_*` converters | `domain` only |
-| Adapters | `app/adapters/{ai,db,http}/` | Everything impure: SQL, HTTP, SDK calls | `domain`, own package (e.g. `*_schemas.py`) |
+| Adapters | `app/adapters/{ai,db,fs,http}/` | Everything impure: SQL, HTTP, SDK calls | `domain`, own package (e.g. `*_schemas.py`) |
 | Composition | `app/dependencies/` | Binds ports to adapters with `partial`, exposes `*Dep` aliases | `adapters`, `domain`, `config` |
 | Controllers | `app/controllers/<feature>_controller.py` | Thin FastAPI routes | `dependencies`, `services`, `wires`, `domain` |
 | Lifespan | `app/lifespan.py` | Creates/closes pool and clients, stores them in `app.state` | `adapters`, `config` |
 | App | `app/main.py` | `create_app()`, router registration, exception handlers | `controllers`, `lifespan`, `config` |
 | Config | `app/config.py` | `Settings` (pydantic-settings, reads `.env`) | nothing |
+| Logging | `app/logging_config.py` | `configure_logging()`, `request_id_var` (called by `create_app()`) | nothing |
 
 ### Import rules (MUST follow)
 
@@ -69,11 +72,12 @@ HTTP ◀─ controller ◀─ wire-out (Pydantic) ◀─ service ◀─ domain m
 - **Providers** in `app/dependencies/ports/<feature>.py`: `def get_<port_snake>(...) -> Port` returning a `partial`, plus `<Port>Dep = Annotated[<Port>, Depends(get_<port_snake>)]`. Both are re-exported in `app/dependencies/__init__.py` (`get_*` is needed for `dependency_overrides` in tests).
 - **Existing `*Dep` aliases** (all importable from `app.dependencies`):
   - Resources: `SettingsDep`, `PoolDep`, `HttpClientDep`, `GeminiClientDep`
-  - Ports: `AskDep`, `AskWithConfigDep`, `FetchPostDep`, `HealthChecksDep`, `InsertItemDep`, `GetItemDep`, `ListItemsDep`, `UpdateItemDep`, `DeleteItemDep`
+  - Ports: `AskDep`, `AskWithConfigDep`, `ExtractInvoiceDep`, `ReadFileDep`, `FetchPostDep`, `HealthChecksDep`, `InsertItemDep`, `GetItemDep`, `ListItemsDep`, `UpdateItemDep`, `DeleteItemDep`
 - **Converters:** `to_<x>_out(domain) -> XOut` in outbound wires, `to_<domain>(wire_in)` in inbound wires, `to_<domain>(row_or_wire)` in adapters.
 - **Naming:** `<feature>_controller.py`, `<feature>_service.py`, `<entity>_repository.py`, `<api>_client.py` + `<api>_schemas.py`. Inbound wires `XIn`, outbound wires `XOut`.
 - All I/O is `async`. Full type hints everywhere (mypy runs on `app/`). Ruff line length 100, rules `E,F,I,B,UP,ASYNC`.
 - Use modern typing: `X | None`, `list[...]`, `dict[...]`, `collections.abc.Callable/Awaitable`.
+- **Logging:** stdlib `logging` only, `logger = logging.getLogger(__name__)` at module level (so every logger lives under `app.`). Configured once in `app/logging_config.py` (console, `LOG_LEVEL`, `request_id` from a `ContextVar` set by the middleware in `app/main.py`). Log at the edges: adapters (call, duration, sizes), lifespan, the exception handlers in `main.py`. Never log secrets (API keys, `database_url`) or prompt/document contents above `DEBUG`. Do not catch exceptions just to log them; the handlers in `main.py` already log upstream errors with traceback.
 - Short docstrings/comments, and only where the code is not obvious. Match the surrounding code (existing comments are in Portuguese; new ones may be in either language).
 
 ## Error mapping
@@ -83,7 +87,7 @@ HTTP ◀─ controller ◀─ wire-out (Pydantic) ◀─ service ◀─ domain m
 | Service returns `None` (not found) | Controller (`ensure_found` / `HTTPException`) | 404 |
 | Delete port returns `False` | Controller | 404 |
 | Invalid body/path/query | Pydantic/FastAPI automatically | 422 |
-| `httpx.HTTPError` or `google.genai.errors.APIError` escapes | Handler in `app/main.py` | 502 |
+| `httpx.HTTPError` or `google.genai.errors.APIError` escapes | Handler in `app/main.py` (logs the full error, body has `detail` + `request_id`) | 502 |
 | Optional resource missing (no `GEMINI_API_KEY`) | `get_gemini_client` in `app/dependencies/resources.py` | 503 |
 | Health has a component `down` | `health_controller` | 503 |
 
@@ -97,6 +101,7 @@ Do not catch infrastructure exceptions in services or controllers. Let them reac
 | POST | `/ai/ask` | `ai_controller.py` |
 | POST | `/ai/ask/advanced` | `ai_controller.py` (accepts generation config) |
 | GET | `/external/posts/{post_id}` | `external_controller.py` |
+| GET | `/sample/extract-invoice` | `sample_controller.py` (extracts the bundled NF-e PDF with Gemini) |
 | POST / GET | `/items`, `/items?limit=&offset=` | `items_controller.py` |
 | GET / PUT / DELETE | `/items/{item_id}` | `items_controller.py` |
 

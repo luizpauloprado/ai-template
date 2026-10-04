@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from app.domain.models import ComponentStatus
 from app.services.health_service import get_health
 from tests.fakes import failing_check, fake_check
@@ -43,3 +45,12 @@ async def test_timeout_becomes_down() -> None:
 
     assert health.components["database"].status == "down"
     assert "timeout" in (health.components["database"].detail or "")
+
+
+async def test_failed_check_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+    await get_health({"database": failing_check(ConnectionError("boom"))}, timeout_seconds=1)
+
+    record = next(r for r in caplog.records if r.name == "app.services.health_service")
+    assert record.levelname == "WARNING"
+    assert "database" in record.getMessage()
+    assert "boom" in record.getMessage()

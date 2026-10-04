@@ -60,3 +60,63 @@ class GenerationConfig(BaseModel):
     max_output_tokens: int | None = None
     stop_sequences: list[str] | None = None
     seed: int | None = None
+
+
+class InvoiceParty(BaseModel):
+    """Emitente ou destinatário de uma NF-e."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    document: str  # CNPJ ou CPF
+    state_registration: str | None
+    address: str | None
+    district: str | None
+    city: str | None
+    state: str | None
+    zip_code: str | None
+
+
+class InvoiceItem(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    code: str
+    description: str
+    ncm: str | None
+    cfop: str | None
+    unit: str | None
+    quantity: float
+    unit_price: float
+    total: float
+
+
+class InvoiceTotals(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    icms_base: float
+    icms: float
+    products_total: float
+    freight: float
+    insurance: float
+    discount: float
+    other_expenses: float
+    ipi: float
+    invoice_total: float
+
+
+class Invoice(BaseModel):
+    """Dados extraídos de uma DANFE (NF-e)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    number: str
+    series: str
+    access_key: str
+    issue_date: str  # YYYY-MM-DD
+    operation_nature: str | None
+    authorization_protocol: str | None
+    issuer: InvoiceParty
+    recipient: InvoiceParty
+    items: list[InvoiceItem]
+    totals: InvoiceTotals
+    additional_info: str | None

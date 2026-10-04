@@ -6,7 +6,7 @@ from fastapi import Depends
 from app.adapters.ai import gemini_adapter
 from app.dependencies.resources import GeminiClientDep
 from app.dependencies.settings import SettingsDep
-from app.domain.ports import Ask, AskWithConfig
+from app.domain.ports import Ask, AskWithConfig, ExtractInvoice
 
 
 def get_ask(client: GeminiClientDep, settings: SettingsDep) -> Ask:
@@ -17,5 +17,10 @@ def get_ask_with_config(client: GeminiClientDep, settings: SettingsDep) -> AskWi
     return partial(gemini_adapter.ask_with_config, client, settings.gemini_model)
 
 
+def get_extract_invoice(client: GeminiClientDep, settings: SettingsDep) -> ExtractInvoice:
+    return partial(gemini_adapter.extract_invoice, client, settings.gemini_model)
+
+
 AskDep = Annotated[Ask, Depends(get_ask)]
 AskWithConfigDep = Annotated[AskWithConfig, Depends(get_ask_with_config)]
+ExtractInvoiceDep = Annotated[ExtractInvoice, Depends(get_extract_invoice)]

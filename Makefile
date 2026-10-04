@@ -1,6 +1,6 @@
 PY ?= venv/bin/python
 
-.PHONY: install up down reset logs db run test test-unit test-acceptance test-integration lint
+.PHONY: install up down reset logs db run test test-unit test-acceptance test-integration test-gemini lint
 
 install:
 	$(PY) -m pip install -r requirements-dev.txt
@@ -34,6 +34,9 @@ test-acceptance:
 
 test-integration:
 	$(PY) -m pytest tests/integration -m integration
+
+test-gemini:  ## chama o Gemini real (requer GEMINI_API_KEY)
+	$(PY) -m pytest tests/gemini -m gemini
 
 lint:
 	$(PY) -m ruff check . && $(PY) -m mypy app
