@@ -9,7 +9,7 @@ description: Use when changing the Gemini integration in app/adapters/ai/, addin
 
 | File | Role |
 |---|---|
-| `app/adapters/ai/gemini_adapter.py` | `create_client`, `to_sdk_config`, `ask`, `ask_with_config` |
+| `app/adapters/ai/gemini_adapter.py` | `create_client`, `to_sdk_config`, `GeminiPricing`, `_log_call`, `ask`, `ask_with_config`, `extract_invoice` |
 | `app/domain/models.py` | `GeneratedText` (output), `GenerationConfig` (provider-agnostic options) |
 | `app/domain/ports.py` | `Ask`, `AskWithConfig` |
 | `app/wires/inbound/ai.py` | `AskIn`, `AskWithConfigIn` (validation bounds) + `to_generation_config` |
@@ -18,7 +18,8 @@ description: Use when changing the Gemini integration in app/adapters/ai/, addin
 
 ## Rules
 
-- MUST: adapter functions take `client: genai.Client, model: str` first, then the port's arguments. The provider binds both: `partial(gemini_adapter.<fn>, client, settings.gemini_model)`.
+- MUST: adapter functions take `client: genai.Client, model: str, pricing: GeminiPricing` first, then the port's arguments. The provider binds all three: `partial(gemini_adapter.<fn>, client, settings.gemini_model, _gemini_pricing(settings))`.
+- MUST: log every call with `_log_call(operation, model, pricing, started, response, info)` (`started = time.perf_counter()` before the call). It logs tokens from `response.usage_metadata` and the estimated cost when `GEMINI_*_PRICE_PER_MTOK` are set. `info` holds input sizes only, never prompt/document contents.
 - MUST: use the async API: `await client.aio.models.generate_content(...)`.
 - MUST: convert SDK responses to domain models (`_to_generated_text`) and never return SDK types. Handle `None` (`response.text or ""`, `response.model_version or model`).
 - MUST: keep `GenerationConfig` provider-agnostic. Field names match `types.GenerateContentConfig` so that `to_sdk_config` stays `GenerateContentConfig(**config.model_dump(exclude_none=True))`.
@@ -41,7 +42,10 @@ Exactly 3 code places, plus tests:
 2. Adapter function in `gemini_adapter.py`:
 
 ```python
-async def summarize(client: genai.Client, model: str, text: str) -> Summary:
+async def summarize(
+    client: genai.Client, model: str, pricing: GeminiPricing, text: str
+) -> Summary:
+    started = time.perf_counter()
     response = await client.aio.models.generate_content(
         model=model,
         contents=text,
@@ -49,6 +53,7 @@ async def summarize(client: genai.Client, model: str, text: str) -> Summary:
             response_mime_type="application/json", response_schema=Summary
         ),
     )
+    _log_call("summarize", model, pricing, started, response, f"text_chars={len(text)}")
     return Summary.model_validate_json(response.text or "{}")
 ```
 
@@ -56,7 +61,9 @@ async def summarize(client: genai.Client, model: str, text: str) -> Summary:
 
 ```python
 def get_summarize(client: GeminiClientDep, settings: SettingsDep) -> Summarize:
-    return partial(gemini_adapter.summarize, client, settings.gemini_model)
+    return partial(
+        gemini_adapter.summarize, client, settings.gemini_model, _gemini_pricing(settings)
+    )
 
 
 SummarizeDep = Annotated[Summarize, Depends(get_summarize)]

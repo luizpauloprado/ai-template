@@ -107,17 +107,19 @@ cp .env.example .env
 # edite o .env e preencha GEMINI_API_KEY (opcional; sem ela, /ai/ask responde 503)
 ```
 
-| Variável                                              | Default                                   | Uso                                                             |
-| ----------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------- |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `app`                                     | credenciais do container                                        |
-| `POSTGRES_PORT`                                       | `5432`                                    | porta exposta no host                                           |
-| `DATABASE_URL`                                        | `postgresql://app:app@localhost:5432/app` | conexão da API. No compose, o host vira `db` automaticamente.   |
-| `GEMINI_API_KEY`                                      | vazio                                     | chave do Gemini                                                 |
-| `GEMINI_MODEL`                                        | `gemini-3.8-flash`                        | modelo usado                                                    |
-| `EXTERNAL_API_BASE_URL`                               | `https://jsonplaceholder.typicode.com`    | API externa                                                     |
-| `HTTP_TIMEOUT_SECONDS`                                | `10`                                      | timeout do httpx                                                |
-| `HEALTH_CHECK_TIMEOUT_SECONDS`                        | `3`                                       | timeout de cada check do /health                                |
-| `LOG_LEVEL`                                           | `INFO`                                    | nível dos logs no console (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| Variável                                              | Default                                   | Uso                                                                       |
+| ----------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------- |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `app`                                     | credenciais do container                                                  |
+| `POSTGRES_PORT`                                       | `5432`                                    | porta exposta no host                                                     |
+| `DATABASE_URL`                                        | `postgresql://app:app@localhost:5432/app` | conexão da API. No compose, o host vira `db` automaticamente.             |
+| `GEMINI_API_KEY`                                      | vazio                                     | chave do Gemini                                                           |
+| `GEMINI_MODEL`                                        | `gemini-3.1-flash-lite`                   | modelo usado                                                              |
+| `GEMINI_INPUT_PRICE_PER_MTOK`                         | `0`                                       | USD por 1M tokens de entrada, para estimar custo no log (0 = não calcula) |
+| `GEMINI_OUTPUT_PRICE_PER_MTOK`                        | `0`                                       | USD por 1M tokens de saída (inclui thinking), para estimar custo no log   |
+| `EXTERNAL_API_BASE_URL`                               | `https://jsonplaceholder.typicode.com`    | API externa                                                               |
+| `HTTP_TIMEOUT_SECONDS`                                | `10`                                      | timeout do httpx                                                          |
+| `HEALTH_CHECK_TIMEOUT_SECONDS`                        | `3`                                       | timeout de cada check do /health                                          |
+| `LOG_LEVEL`                                           | `INFO`                                    | nível dos logs no console (`DEBUG`, `INFO`, `WARNING`, `ERROR`)           |
 
 ---
 
@@ -196,8 +198,9 @@ Erros vindos de serviços externos (httpx ou Gemini) viram **502**. O corpo traz
 ## Logs
 
 A API loga no console (stdout), no formato `data nível logger [request_id] mensagem`:
+gemini-3.1-flash-lite
 
-```
+```gemini-3.1-flash-lite
 INFO    app.lifespan [-] gemini configurado (model=gemini-3.8-flash)
 ERROR   app.main [f78ed767bbe2] upstream error on GET /sample/extract-invoice: 404 NOT_FOUND. {...'This model models/gemini-3.8-flash is no longer available...'}
 Traceback (most recent call last): ...
@@ -208,7 +211,15 @@ INFO    app.main [cb7a5de30c13] GET /external/posts/1 -> 200 (52.1 ms)
 
 - Toda requisição gera um `request_id`, devolvido no header `X-Request-ID` (se o cliente mandar esse header, o valor dele é reaproveitado). Para investigar um 502, procure no log pelo `request_id` do corpo da resposta.
 - Cada request é logado com status e duração: `INFO` para 2xx/3xx, `WARNING` para 4xx e `ERROR` para 5xx.
-- Também aparecem no log: startup/shutdown (`app.lifespan`), cada chamada ao Gemini com modelo e duração, cada chamada HTTP externa e os checks do `/health` que falharem.
+- Também aparecem no log: startup/shutdown (`app.lifespan`), cada chamada ao Gemini, cada chamada HTTP externa e os checks do `/health` que falharem.
+- Cada chamada ao Gemini loga modelo, tokens e duração. Com `GEMINI_INPUT_PRICE_PER_MTOK` / `GEMINI_OUTPUT_PRICE_PER_MTOK` preenchidos (preço do seu modelo, em USD por 1M tokens), loga também o custo estimado:
+
+  ```
+  gemini extract_invoice model=gemini-3.1-flash-lite pdf_bytes=10891 tokens_in=724 tokens_out=717 tokens_thinking=0 tokens_cached=0 tokens_total=1441 cost_usd=0.002010 took 4.24s
+  ```
+
+  O custo é só uma estimativa: tokens de thinking contam como saída, tokens em cache entram com o preço cheio de entrada (o Google cobra menos) e o plano gratuito não é considerado.
+
 - `LOG_LEVEL=DEBUG` mostra também a resposta bruta do Gemini.
 
 ---

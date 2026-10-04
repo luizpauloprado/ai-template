@@ -12,7 +12,14 @@ pytestmark = pytest.mark.gemini
 
 
 async def test_extracts_sample_invoice_with_real_gemini(gemini_client: genai.Client) -> None:
-    extract = partial(gemini_adapter.extract_invoice, gemini_client, get_settings().gemini_model)
+    settings = get_settings()
+    pricing = gemini_adapter.GeminiPricing(
+        input_per_mtok=settings.gemini_input_price_per_mtok,
+        output_per_mtok=settings.gemini_output_price_per_mtok,
+    )
+    extract = partial(
+        gemini_adapter.extract_invoice, gemini_client, settings.gemini_model, pricing
+    )
 
     invoice = await sample_service.extract_sample_invoice(file_reader.read_bytes, extract)
 
