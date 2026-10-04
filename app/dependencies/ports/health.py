@@ -1,4 +1,7 @@
 from functools import partial
+from typing import Annotated
+
+from fastapi import Depends
 
 from app.adapters.db import postgres_adapter
 from app.dependencies.resources import PoolDep
@@ -11,3 +14,6 @@ def get_health_checks(pool: PoolDep) -> dict[str, CheckComponent]:
         "pgvector": partial(postgres_adapter.check_pgvector, pool),
         "pgmq": partial(postgres_adapter.check_pgmq, pool),
     }
+
+
+HealthChecksDep = Annotated[dict[str, CheckComponent], Depends(get_health_checks)]

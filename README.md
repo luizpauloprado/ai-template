@@ -25,7 +25,7 @@ HTTP ◀── controller ◀── wire-out (Pydantic) ◀── service ◀─
 | **Domain** | `app/domain/models.py` | Entidades (`Item`, `Post`, `HealthStatus`, …) imutáveis, sem nada de infraestrutura. |
 | **Ports** | `app/domain/ports.py` | Contratos como **aliases de `Callable`** (ex.: `GetItem = Callable[[int], Awaitable[Item \| None]]`). |
 | **Adapters** | `app/adapters/` | Tudo o que é impuro: `ai/gemini_adapter.py`, `db/postgres_adapter.py`, `db/item_repository.py`, `http/external_api_client.py`. |
-| **Composição** | `app/dependencies/` | Liga ports a adapters com `functools.partial(adapter, pool_ou_client)` e os injeta via `Depends`. `resources.py` lê os recursos de `app.state`; `ports/<feature>.py` monta cada port. |
+| **Composição** | `app/dependencies/` | Liga ports a adapters com `functools.partial(adapter, pool_ou_client)`. Cada provider `get_<port>()` tem um alias `<Port>Dep = Annotated[<Port>, Depends(get_<port>)]`, e os controllers injetam **só** por esses aliases. `resources.py` lê os recursos de `app.state` (`PoolDep`, `HttpClientDep`, `GeminiClientDep`); `ports/<feature>.py` monta cada port. |
 | **Lifespan** | `app/lifespan.py` | Cria e fecha o pool do Postgres, o `httpx.AsyncClient` e o client do Gemini, guardando-os em `app.state`. |
 
 ### Por que "wire"?
@@ -60,11 +60,11 @@ app/
     inbound/                   request bodies: ai.py, items.py
     outbound/                  responses + to_*_out(): ai.py, external.py, health.py, items.py
   controllers/                 rotas FastAPI: ai, external, health, items (*_controller.py)
-  dependencies/                composição ports <-> adapters (Depends)
-    __init__.py                reexporta os providers e dependências
+  dependencies/                composição ports <-> adapters (aliases *Dep)
+    __init__.py                reexporta os providers get_* e os aliases *Dep
     settings.py                SettingsDep
-    resources.py               get_db_pool, get_http_client, get_gemini_client (lêem app.state)
-    ports/                     um provider por port: ai.py, external.py, health.py, items.py
+    resources.py               get_db_pool, get_http_client, get_gemini_client (lêem app.state) + PoolDep, HttpClientDep, GeminiClientDep
+    ports/                     um provider + alias *Dep por port: ai.py, external.py, health.py, items.py
   adapters/                    tudo o que é impuro
     ai/gemini_adapter.py
     db/postgres_adapter.py     pool + checks de health
@@ -82,6 +82,9 @@ pyproject.toml                 config de pytest, ruff e mypy
 requirements.txt               dependências de runtime
 requirements-dev.txt           runtime + pytest, respx, ruff, mypy
 .env.example                   modelo do .env
+AGENTS.md                      guia para agentes de IA (regras, convenções, índice de skills)
+CLAUDE.md                      importa o AGENTS.md (Claude Code)
+.agents/skills/                skills por camada (templates e checklists); .claude/skills aponta para cá
 tests/
   fakes.py                     implementações fake dos ports
   unit/                        services, wires e adapters (com mocks/respx)
@@ -149,6 +152,7 @@ make run         # uvicorn app.main:app --reload
 |---|---|---|
 | GET | `/health` | Status da API, do banco, do pgvector e do PGMQ. Responde 200 se tudo estiver `up` e 503 se algo estiver `down`. |
 | POST | `/ai/ask` | Gera texto com o Gemini |
+| POST | `/ai/ask/advanced` | Gera texto com parâmetros de geração (`system_instruction`, `temperature`, `top_p`, `top_k`, `max_output_tokens`, `stop_sequences`, `seed`) |
 | GET | `/external/posts/{id}` | Busca um post na API externa |
 | POST | `/items` | Cria um item |
 | GET | `/items?limit=20&offset=0` | Lista os itens (paginado) |
@@ -232,6 +236,6 @@ make lint               # ruff + mypy
 3. **Adapter**: crie `app/adapters/db/<entidade>_repository.py` com funções `async def x(pool, ...)`.
 4. **Service**: crie `app/services/<entidade>_service.py`, que recebe os ports como parâmetros.
 5. **Wires**: crie `app/wires/inbound/<entidade>.py` e `app/wires/outbound/<entidade>.py` (com a função `to_<entidade>_out`).
-6. **Composição**: crie `app/dependencies/ports/<entidade>.py` com `get_<port>()` retornando `partial(repo_fn, pool)` e reexporte em `app/dependencies/__init__.py`.
-7. **Controller**: crie `app/controllers/<entidade>_controller.py` e registre o router em `app/main.py`.
+6. **Composição**: crie `app/dependencies/ports/<entidade>.py` com `get_<port>()` retornando `partial(repo_fn, pool)` e o alias `<Port>Dep = Annotated[<Port>, Depends(get_<port>)]`. Reexporte os dois em `app/dependencies/__init__.py`.
+7. **Controller**: crie `app/controllers/<entidade>_controller.py` injetando os ports só pelos aliases `*Dep` (nada de `Depends` no controller) e registre o router em `app/main.py`.
 8. **Testes**: adicione um fake em `tests/fakes.py`, testes unitários do service, testes de aceitação do endpoint e testes de integração do repository.

@@ -21,6 +21,7 @@ This is the **only** place where ports meet adapters.
 ## Rules
 
 - MUST: a provider returns `partial(adapter_fn, <resources...>)`, and its return type is the port alias.
+- MUST: `Depends(...)` appears only in `*Dep` alias definitions. Provider and controller signatures use the aliases, never an inline `Annotated[X, Depends(get_x)]`.
 - MUST: every provider has a sibling alias `<Port>Dep = Annotated[<Port>, Depends(get_<port_snake>)]`.
 - MUST: providers receive resources via `PoolDep`, `GeminiClientDep`, `HttpClientDep` and `SettingsDep`, never by touching `app.state` directly.
 - MUST: re-export both `get_*` (tests override these) and `*Dep` (controllers use these) in `app/dependencies/__init__.py` and add them to `__all__` (kept sorted).
@@ -32,10 +33,13 @@ This is the **only** place where ports meet adapters.
 
 | Port alias | Provider | Dep alias |
 |---|---|---|
-| `GetNote` | `get_get_note` | `GetNoteDep` |
-| `InsertNote` | `get_insert_note` | `InsertNoteDep` |
+| `GetItem` | `get_get_item` | `GetItemDep` |
+| `InsertItem` | `get_insert_item` | `InsertItemDep` |
 | `FetchPost` | `get_fetch_post` | `FetchPostDep` |
 | `dict[str, CheckComponent]` | `get_health_checks` | `HealthChecksDep` |
+| `httpx.AsyncClient` (resource) | `get_http_client` | `HttpClientDep` |
+
+For a new entity, follow the same rule: `GetNote` → `get_get_note` → `GetNoteDep`.
 
 ## Template: provider (`app/dependencies/ports/note.py`)
 
@@ -165,7 +169,8 @@ make lint && make test-acceptance
 ## Reference implementation
 
 - `app/dependencies/ports/ai.py`: canonical `*Dep` pattern, partial with two bound values
-- `app/dependencies/ports/items.py`: one provider per repository function
-- `app/dependencies/ports/health.py`: provider returning a dict of ports
-- `app/dependencies/resources.py`: resource getters, optional resource → 503
+- `app/dependencies/ports/items.py`: one provider + `*Dep` per repository function
+- `app/dependencies/ports/external.py`: provider receiving a resource via `HttpClientDep`
+- `app/dependencies/ports/health.py`: provider returning a dict of ports (`HealthChecksDep`)
+- `app/dependencies/resources.py`: resource getters + `PoolDep` / `HttpClientDep` / `GeminiClientDep`, optional resource → 503
 - `app/lifespan.py`: resource lifecycle

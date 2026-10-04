@@ -25,7 +25,7 @@ description: Use when adding or changing HTTP request/response contracts (app/wi
 
 - MUST: `router = APIRouter(prefix="/<plural>", tags=["<plural>"])` at module level.
 - MUST: each route is `async def`, declares `response_model=`, and returns `to_<x>_out(...)`.
-- MUST: inject ports **only** via `*Dep` aliases imported from `app.dependencies` (e.g. `insert: InsertNoteDep`).
+- MUST: inject ports and resources **only** via `*Dep` aliases imported from `app.dependencies` (e.g. `insert: InsertNoteDep`). Controllers never import `Depends` or `get_*` providers.
 - MUST: call a function from `app.services.<feature>_service`, never the port directly and never an adapter.
 - MUST: map `None` to 404 with `ensure_found` (or `HTTPException(status.HTTP_404_NOT_FOUND, "<entity> not found")`).
 - Status codes: create uses `status_code=status.HTTP_201_CREATED`. Delete uses `status_code=status.HTTP_204_NO_CONTENT` and returns `Response(status_code=status.HTTP_204_NO_CONTENT)`.
@@ -175,8 +175,9 @@ make lint && make test-unit && make test-acceptance
 
 ## Reference implementation
 
-- `app/controllers/items_controller.py`: full CRUD, `ensure_found`, pagination
+- `app/controllers/items_controller.py`: full CRUD with `*Dep` aliases, `ensure_found`, pagination
 - `app/controllers/ai_controller.py`: `*Dep` aliases, inbound→domain converter
-- `app/controllers/health_controller.py`: dynamic status code via `Response`
+- `app/controllers/external_controller.py`: single port (`FetchPostDep`) + 404
+- `app/controllers/health_controller.py`: dynamic status code via `Response`, `HealthChecksDep` + `SettingsDep`
 - `app/wires/inbound/ai.py`: `Field` constraints, `to_generation_config`
 - `app/wires/outbound/health.py`: nested outbound wire

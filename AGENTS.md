@@ -56,6 +56,7 @@ HTTP ◀─ controller ◀─ wire-out (Pydantic) ◀─ service ◀─ domain m
 - `domain/`, `services/` and `wires/` MUST NOT import `fastapi`, `httpx`, `psycopg`, `google.genai`, adapters, or `dependencies`.
 - Only `dependencies/` and `lifespan.py` import from `adapters/`. Controllers never import adapters.
 - Controllers MUST get ports through `*Dep` aliases imported from `app.dependencies` (the package, not submodules).
+- `Depends(...)` appears **only** on the line that defines a `*Dep` alias in `app/dependencies/`. Never write `Annotated[X, Depends(get_x)]` in a controller or a provider signature; use the alias. (`Annotated[int, Path(...)]` / `Query(...)` for validation is fine.)
 - Third-party payload formats (e.g. camelCase fields) stay inside the adapter (`*_schemas.py`). The adapter returns domain models.
 
 ## Conventions
@@ -66,6 +67,9 @@ HTTP ◀─ controller ◀─ wire-out (Pydantic) ◀─ service ◀─ domain m
 - **Adapter signature:** resources first, then the port arguments: `async def get_item(pool: AsyncConnectionPool, item_id: int) -> Item | None`. `partial(get_item, pool)` must match the port exactly.
 - **Service signature:** data arguments first, ports last: `async def get_item(item_id: int, get: GetItem) -> Item | None`.
 - **Providers** in `app/dependencies/ports/<feature>.py`: `def get_<port_snake>(...) -> Port` returning a `partial`, plus `<Port>Dep = Annotated[<Port>, Depends(get_<port_snake>)]`. Both are re-exported in `app/dependencies/__init__.py` (`get_*` is needed for `dependency_overrides` in tests).
+- **Existing `*Dep` aliases** (all importable from `app.dependencies`):
+  - Resources: `SettingsDep`, `PoolDep`, `HttpClientDep`, `GeminiClientDep`
+  - Ports: `AskDep`, `AskWithConfigDep`, `FetchPostDep`, `HealthChecksDep`, `InsertItemDep`, `GetItemDep`, `ListItemsDep`, `UpdateItemDep`, `DeleteItemDep`
 - **Converters:** `to_<x>_out(domain) -> XOut` in outbound wires, `to_<domain>(wire_in)` in inbound wires, `to_<domain>(row_or_wire)` in adapters.
 - **Naming:** `<feature>_controller.py`, `<feature>_service.py`, `<entity>_repository.py`, `<api>_client.py` + `<api>_schemas.py`. Inbound wires `XIn`, outbound wires `XOut`.
 - All I/O is `async`. Full type hints everywhere (mypy runs on `app/`). Ruff line length 100, rules `E,F,I,B,UP,ASYNC`.
