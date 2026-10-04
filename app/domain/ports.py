@@ -7,13 +7,14 @@ São apenas assinaturas de função. Qualquer função com a mesma assinatura
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from app.domain.models import ComponentStatus, GeneratedText, Item, Post
+from app.domain.models import ComponentStatus, GeneratedText, GenerationConfig, Item, Post
 
 # Health
 CheckComponent = Callable[[], Awaitable[ComponentStatus]]
 
 # AI
 GenerateText = Callable[[str], Awaitable[GeneratedText]]
+GenerateTextWithConfig = Callable[[str, GenerationConfig], Awaitable[GeneratedText]]
 
 # API externa
 FetchPost = Callable[[int], Awaitable[Post | None]]

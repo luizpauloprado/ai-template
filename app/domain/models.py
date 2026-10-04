@@ -46,3 +46,17 @@ class GeneratedText(BaseModel):
 
     text: str
     model: str
+
+
+class GenerationConfig(BaseModel):
+    """Parâmetros opcionais de geração. Só o que for informado é enviado ao provedor."""
+
+    model_config = ConfigDict(frozen=True)
+
+    system_instruction: str | None = None
+    temperature: float | None = None
+    top_p: float | None = None
+    top_k: int | None = None
+    max_output_tokens: int | None = None
+    stop_sequences: list[str] | None = None
+    seed: int | None = None

@@ -5,7 +5,7 @@ criados no lifespan (pool, clients; veja `resources.py`). Nos testes, basta
 sobrescrever estas funções com `app.dependency_overrides`.
 """
 
-from app.dependencies.ports.ai import get_generate_text
+from app.dependencies.ports.ai import get_generate_text, get_generate_text_with_config
 from app.dependencies.ports.external import get_fetch_post
 from app.dependencies.ports.health import get_health_checks
 from app.dependencies.ports.items import (
@@ -26,6 +26,7 @@ __all__ = [
     "get_fetch_post",
     "get_gemini_client",
     "get_generate_text",
+    "get_generate_text_with_config",
     "get_get_item",
     "get_health_checks",
     "get_http_client",

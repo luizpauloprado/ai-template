@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 from itertools import count
 from typing import Any
 
-from app.domain.models import ComponentStatus, GeneratedText, Item, Post
-from app.domain.ports import CheckComponent, FetchPost, GenerateText
+from app.domain.models import ComponentStatus, GeneratedText, GenerationConfig, Item, Post
+from app.domain.ports import CheckComponent, FetchPost, GenerateText, GenerateTextWithConfig
 
 
 def make_fake_item_table() -> dict[str, Any]:
@@ -55,6 +55,19 @@ def fake_generate_text(model: str = "fake-model") -> GenerateText:
         return GeneratedText(text=f"echo: {prompt}", model=model)
 
     return generate_text
+
+
+def fake_generate_text_with_config(
+    calls: list[tuple[str, GenerationConfig]] | None = None, model: str = "fake-model"
+) -> GenerateTextWithConfig:
+    """Registra as chamadas em `calls` para os testes conferirem o que foi repassado."""
+
+    async def generate_text_with_config(prompt: str, config: GenerationConfig) -> GeneratedText:
+        if calls is not None:
+            calls.append((prompt, config))
+        return GeneratedText(text=f"echo: {prompt}", model=model)
+
+    return generate_text_with_config
 
 
 def fake_fetch_post(posts: dict[int, Post]) -> FetchPost:

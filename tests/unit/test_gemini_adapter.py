@@ -1,7 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from app.adapters.ai.gemini_adapter import generate_text
+from app.adapters.ai.gemini_adapter import generate_text, generate_text_with_config, to_sdk_config
+from app.domain.models import GenerationConfig
 
 
 def fake_client(text: str | None, model_version: str | None) -> AsyncMock:
@@ -26,3 +27,25 @@ async def test_generate_text_handles_empty_response() -> None:
 
     assert generated.text == ""
     assert generated.model == "gemini-x"
+
+
+def test_to_sdk_config_maps_only_provided_fields() -> None:
+    sdk_config = to_sdk_config(GenerationConfig(system_instruction="seja breve", temperature=0.2))
+
+    assert sdk_config.system_instruction == "seja breve"
+    assert sdk_config.temperature == 0.2
+    assert sdk_config.top_p is None
+    assert sdk_config.max_output_tokens is None
+
+
+async def test_generate_text_with_config_passes_config_to_client() -> None:
+    client = fake_client("oi", "gemini-x-001")
+    config = GenerationConfig(temperature=0.5, max_output_tokens=100)
+
+    generated = await generate_text_with_config(client, "gemini-x", "prompt", config)
+
+    assert generated.text == "oi"
+    assert generated.model == "gemini-x-001"
+    client.aio.models.generate_content.assert_awaited_once_with(
+        model="gemini-x", contents="prompt", config=to_sdk_config(config)
+    )
