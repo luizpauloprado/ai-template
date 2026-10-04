@@ -18,12 +18,12 @@ def _to_generated_text(response: types.GenerateContentResponse, model: str) -> G
     return GeneratedText(text=response.text or "", model=response.model_version or model)
 
 
-async def generate_text(client: genai.Client, model: str, prompt: str) -> GeneratedText:
+async def ask(client: genai.Client, model: str, prompt: str) -> GeneratedText:
     response = await client.aio.models.generate_content(model=model, contents=prompt)
     return _to_generated_text(response, model)
 
 
-async def generate_text_with_config(
+async def ask_with_config(
     client: genai.Client, model: str, prompt: str, config: GenerationConfig
 ) -> GeneratedText:
     response = await client.aio.models.generate_content(

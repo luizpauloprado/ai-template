@@ -101,7 +101,7 @@ tests/
 
 ```bash
 cp .env.example .env
-# edite o .env e preencha GEMINI_API_KEY (opcional; sem ela, /ai/generate responde 503)
+# edite o .env e preencha GEMINI_API_KEY (opcional; sem ela, /ai/ask responde 503)
 ```
 
 | Variável | Default | Uso |
@@ -148,7 +148,7 @@ make run         # uvicorn app.main:app --reload
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/health` | Status da API, do banco, do pgvector e do PGMQ. Responde 200 se tudo estiver `up` e 503 se algo estiver `down`. |
-| POST | `/ai/generate` | Gera texto com o Gemini |
+| POST | `/ai/ask` | Gera texto com o Gemini |
 | GET | `/external/posts/{id}` | Busca um post na API externa |
 | POST | `/items` | Cria um item |
 | GET | `/items?limit=20&offset=0` | Lista os itens (paginado) |
@@ -171,7 +171,7 @@ curl -X DELETE localhost:8000/items/1
 
 curl localhost:8000/external/posts/1
 
-curl -X POST localhost:8000/ai/generate -H 'content-type: application/json' \
+curl -X POST localhost:8000/ai/ask -H 'content-type: application/json' \
   -d '{"prompt": "Explique arquitetura hexagonal em uma frase"}'
 ```
 

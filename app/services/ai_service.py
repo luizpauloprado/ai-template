@@ -1,14 +1,12 @@
 from app.domain.models import GeneratedText, GenerationConfig
-from app.domain.ports import GenerateText, GenerateTextWithConfig
+from app.domain.ports import Ask, AskWithConfig
 
 
-async def generate(prompt: str, generate_text: GenerateText) -> GeneratedText:
-    return await generate_text(prompt.strip())
+async def ask(prompt: str, llm: Ask) -> GeneratedText:
+    return await llm(prompt.strip())
 
 
-async def generate_with_config(
-    prompt: str,
-    config: GenerationConfig,
-    generate_text_with_config: GenerateTextWithConfig,
+async def ask_with_config(
+    prompt: str, config: GenerationConfig, llm: AskWithConfig
 ) -> GeneratedText:
-    return await generate_text_with_config(prompt.strip(), config)
+    return await llm(prompt.strip(), config)

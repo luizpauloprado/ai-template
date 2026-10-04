@@ -24,3 +24,4 @@ def get_gemini_client(request: Request) -> genai.Client:
 
 
 PoolDep = Annotated[AsyncConnectionPool, Depends(get_db_pool)]
+GeminiClientDep = Annotated[genai.Client, Depends(get_gemini_client)]

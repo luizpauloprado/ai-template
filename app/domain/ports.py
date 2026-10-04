@@ -13,8 +13,8 @@ from app.domain.models import ComponentStatus, GeneratedText, GenerationConfig, 
 CheckComponent = Callable[[], Awaitable[ComponentStatus]]
 
 # AI
-GenerateText = Callable[[str], Awaitable[GeneratedText]]
-GenerateTextWithConfig = Callable[[str, GenerationConfig], Awaitable[GeneratedText]]
+Ask = Callable[[str], Awaitable[GeneratedText]]
+AskWithConfig = Callable[[str, GenerationConfig], Awaitable[GeneratedText]]
 
 # API externa
 FetchPost = Callable[[int], Awaitable[Post | None]]

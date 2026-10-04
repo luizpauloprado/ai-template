@@ -2,13 +2,13 @@ import pytest
 from pydantic import ValidationError
 
 from app.adapters.http.external_api_schemas import ExternalPostWire, to_post
-from app.wires.inbound.ai import GenerateIn
+from app.wires.inbound.ai import AskIn
 from app.wires.inbound.items import ItemIn
 
 
-def test_generate_in_rejects_empty_prompt() -> None:
+def test_ask_in_rejects_empty_prompt() -> None:
     with pytest.raises(ValidationError):
-        GenerateIn(prompt="")
+        AskIn(prompt="")
 
 
 def test_item_in_requires_object_details() -> None:

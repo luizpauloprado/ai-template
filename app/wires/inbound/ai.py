@@ -3,11 +3,11 @@ from pydantic import BaseModel, Field
 from app.domain.models import GenerationConfig
 
 
-class GenerateIn(BaseModel):
+class AskIn(BaseModel):
     prompt: str = Field(min_length=1, max_length=8000)
 
 
-class GenerateWithConfigIn(GenerateIn):
+class AskWithConfigIn(AskIn):
     system_instruction: str | None = Field(default=None, max_length=8000)
     temperature: float | None = Field(default=None, ge=0, le=2)
     top_p: float | None = Field(default=None, ge=0, le=1)
@@ -17,5 +17,5 @@ class GenerateWithConfigIn(GenerateIn):
     seed: int | None = None
 
 
-def to_generation_config(wire_in: GenerateWithConfigIn) -> GenerationConfig:
+def to_generation_config(wire_in: AskWithConfigIn) -> GenerationConfig:
     return GenerationConfig(**wire_in.model_dump(exclude={"prompt"}))
