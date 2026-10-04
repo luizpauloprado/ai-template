@@ -1,9 +1,9 @@
 import pytest
 from pydantic import ValidationError
 
-from app.adapters.http.external_api_wires import ExternalPostWire, to_post
-from app.wires.ai_in import GenerateIn
-from app.wires.items_in import ItemIn
+from app.adapters.http.external_api_schemas import ExternalPostWire, to_post
+from app.wires.inbound.ai import GenerateIn
+from app.wires.inbound.items import ItemIn
 
 
 def test_generate_in_rejects_empty_prompt() -> None:

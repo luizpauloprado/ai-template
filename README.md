@@ -20,24 +20,24 @@ HTTP ◀── controller ◀── wire-out (Pydantic) ◀── service ◀─
 | Camada | Pasta | Responsabilidade |
 |---|---|---|
 | **Controllers** | `app/controllers/` | Rotas FastAPI finas: recebem o wire-in, chamam o service e devolvem o wire-out. Traduzem `None` em 404. |
-| **Wires** | `app/wires/` | Contratos HTTP de entrada (`*_in.py`) e saída (`*_out.py`), com as funções `to_*_out()` que convertem a partir do domínio. |
+| **Wires** | `app/wires/` | Contratos HTTP de entrada (`inbound/`) e saída (`outbound/`), com as funções `to_*_out()` que convertem a partir do domínio. |
 | **Services** | `app/services/` | Regras de negócio. Recebem os **ports** como parâmetros e nunca importam adapters. |
 | **Domain** | `app/domain/models.py` | Entidades (`Item`, `Post`, `HealthStatus`, …) imutáveis, sem nada de infraestrutura. |
 | **Ports** | `app/domain/ports.py` | Contratos como **aliases de `Callable`** (ex.: `GetItem = Callable[[int], Awaitable[Item \| None]]`). |
 | **Adapters** | `app/adapters/` | Tudo o que é impuro: `ai/gemini_adapter.py`, `db/postgres_adapter.py`, `db/item_repository.py`, `http/external_api_client.py`. |
-| **Composição** | `app/dependencies.py` | Liga ports a adapters com `functools.partial(adapter, pool_ou_client)` e os injeta via `Depends`. |
-| **Lifespan** | `app/main.py` | Cria e fecha o pool do Postgres, o `httpx.AsyncClient` e o client do Gemini, guardando-os em `app.state`. |
+| **Composição** | `app/dependencies/` | Liga ports a adapters com `functools.partial(adapter, pool_ou_client)` e os injeta via `Depends`. `resources.py` lê os recursos de `app.state`; `ports/<feature>.py` monta cada port. |
+| **Lifespan** | `app/lifespan.py` | Cria e fecha o pool do Postgres, o `httpx.AsyncClient` e o client do Gemini, guardando-os em `app.state`. |
 
 ### Por que "wire"?
 
 "Wire" é o formato do dado que **atravessa uma fronteira**, como em *wire format*. Há dois tipos:
 
 - **Wires HTTP** (`app/wires/`): o contrato público da sua API.
-- **Wires de adapter** (ex.: `app/adapters/http/external_api_wires.py`): o formato de uma API de terceiros (com `userId` em camelCase etc.). Eles ficam **dentro do adapter**, que valida a resposta e devolve um modelo de domínio. Assim o formato de terceiros não vaza para o resto da aplicação.
+- **Wires de adapter** (ex.: `app/adapters/http/external_api_schemas.py`): o formato de uma API de terceiros (com `userId` em camelCase etc.). Eles ficam **dentro do adapter**, que valida a resposta e devolve um modelo de domínio. Assim o formato de terceiros não vaza para o resto da aplicação.
 
 ### Por que funções em vez de classes?
 
-Um port é só uma assinatura. Qualquer função compatível pode ser injetada: o adapter real em produção ou uma função fake no teste (veja `tests/fakes.py`). Para trocar o Postgres por outra coisa, basta escrever novas funções com a mesma assinatura e mudar `dependencies.py`.
+Um port é só uma assinatura. Qualquer função compatível pode ser injetada: o adapter real em produção ou uma função fake no teste (veja `tests/fakes.py`). Para trocar o Postgres por outra coisa, basta escrever novas funções com a mesma assinatura e mudar o provider correspondente em `app/dependencies/ports/`.
 
 ---
 
@@ -45,19 +45,24 @@ Um port é só uma assinatura. Qualquer função compatível pode ser injetada: 
 
 ```
 app/
-  main.py               create_app(), lifespan, handlers de erro
+  main.py               create_app(), handlers de erro
+  lifespan.py           cria/fecha pool, http client e client do Gemini
   config.py             Settings (pydantic-settings, lê .env)
-  dependencies.py       composição ports ↔ adapters
+  dependencies/         composição ports ↔ adapters
+    settings.py, resources.py
+    ports/              ai, external, health, items
   domain/               models.py, ports.py
   services/             health, ai, items, external
-  wires/                *_in.py / *_out.py
+  wires/
+    inbound/            request bodies
+    outbound/           responses + to_*_out()
   controllers/          health, ai, items, external
   adapters/
     ai/gemini_adapter.py
     db/postgres_adapter.py     pool + checks de health
     db/item_repository.py      SQL da tabela item
     http/external_api_client.py
-    http/external_api_wires.py
+    http/external_api_schemas.py
 db/init/                SQL executado na 1ª subida do banco (extensões, fila, tabela item)
 docker/postgres.Dockerfile     pgvector:pg17 + PGMQ compilado do fonte
 Dockerfile              imagem da API (python 3.13)
@@ -211,7 +216,7 @@ make lint               # ruff + mypy
 2. **Domínio**: adicione o modelo em `app/domain/models.py` e os ports em `app/domain/ports.py`.
 3. **Adapter**: crie `app/adapters/db/<entidade>_repository.py` com funções `async def x(pool, ...)`.
 4. **Service**: crie `app/services/<entidade>_service.py`, que recebe os ports como parâmetros.
-5. **Wires**: crie `app/wires/<entidade>_in.py` e `<entidade>_out.py` (com a função `to_<entidade>_out`).
-6. **Composição**: em `app/dependencies.py`, adicione `get_<port>()` retornando `partial(repo_fn, pool)`.
+5. **Wires**: crie `app/wires/inbound/<entidade>.py` e `app/wires/outbound/<entidade>.py` (com a função `to_<entidade>_out`).
+6. **Composição**: crie `app/dependencies/ports/<entidade>.py` com `get_<port>()` retornando `partial(repo_fn, pool)` e reexporte em `app/dependencies/__init__.py`.
 7. **Controller**: crie `app/controllers/<entidade>_controller.py` e registre o router em `app/main.py`.
 8. **Testes**: adicione um fake em `tests/fakes.py`, testes unitários do service, testes de aceitação do endpoint e testes de integração do repository.

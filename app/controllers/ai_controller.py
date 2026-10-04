@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends
 from app.dependencies import get_generate_text
 from app.domain.ports import GenerateText
 from app.services import ai_service
-from app.wires.ai_in import GenerateIn
-from app.wires.ai_out import GenerateOut, to_generate_out
+from app.wires.inbound.ai import GenerateIn
+from app.wires.outbound.ai import GenerateOut, to_generate_out
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 

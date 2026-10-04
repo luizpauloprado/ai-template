@@ -2,7 +2,7 @@
 
 import httpx
 
-from app.adapters.http.external_api_wires import ExternalPostWire, to_post
+from app.adapters.http.external_api_schemas import ExternalPostWire, to_post
 from app.domain.models import Post
 
 

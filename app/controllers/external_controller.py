@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, status
 from app.dependencies import get_fetch_post
 from app.domain.ports import FetchPost
 from app.services import external_service
-from app.wires.external_out import PostOut, to_post_out
+from app.wires.outbound.external import PostOut, to_post_out
 
 router = APIRouter(prefix="/external", tags=["external"])
 

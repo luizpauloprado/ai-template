@@ -12,8 +12,8 @@ from app.dependencies import (
 from app.domain.models import Item
 from app.domain.ports import DeleteItem, GetItem, InsertItem, ListItems, UpdateItem
 from app.services import items_service
-from app.wires.items_in import ItemIn
-from app.wires.items_out import ItemOut, to_item_out
+from app.wires.inbound.items import ItemIn
+from app.wires.outbound.items import ItemOut, to_item_out
 
 router = APIRouter(prefix="/items", tags=["items"])
 

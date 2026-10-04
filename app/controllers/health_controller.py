@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Response, status
 from app.dependencies import SettingsDep, get_health_checks
 from app.domain.ports import CheckComponent
 from app.services import health_service
-from app.wires.health_out import HealthOut, to_health_out
+from app.wires.outbound.health import HealthOut, to_health_out
 
 router = APIRouter(tags=["health"])
 
