@@ -45,33 +45,48 @@ Um port é só uma assinatura. Qualquer função compatível pode ser injetada: 
 
 ```
 app/
-  main.py               create_app(), handlers de erro
-  lifespan.py           cria/fecha pool, http client e client do Gemini
-  config.py             Settings (pydantic-settings, lê .env)
-  dependencies/         composição ports ↔ adapters
-    settings.py, resources.py
-    ports/              ai, external, health, items
-  domain/               models.py, ports.py
-  services/             health, ai, items, external
-  wires/
-    inbound/            request bodies
-    outbound/           responses + to_*_out()
-  controllers/          health, ai, items, external
-  adapters/
+  main.py                      create_app(), registro dos routers e handlers de erro (502)
+  lifespan.py                  cria/fecha pool, http client e client do Gemini (em app.state)
+  config.py                    Settings (pydantic-settings, lê .env)
+  domain/
+    models.py                  entidades imutáveis (Item, Post, HealthStatus, ...)
+    ports.py                   ports como aliases de Callable
+  services/                    regras de negócio (recebem ports como parâmetros)
+    ai_service.py
+    external_service.py
+    health_service.py
+    items_service.py
+  wires/                       contratos HTTP
+    inbound/                   request bodies: ai.py, items.py
+    outbound/                  responses + to_*_out(): ai.py, external.py, health.py, items.py
+  controllers/                 rotas FastAPI: ai, external, health, items (*_controller.py)
+  dependencies/                composição ports <-> adapters (Depends)
+    __init__.py                reexporta os providers e dependências
+    settings.py                SettingsDep
+    resources.py               get_db_pool, get_http_client, get_gemini_client (lêem app.state)
+    ports/                     um provider por port: ai.py, external.py, health.py, items.py
+  adapters/                    tudo o que é impuro
     ai/gemini_adapter.py
     db/postgres_adapter.py     pool + checks de health
     db/item_repository.py      SQL da tabela item
     http/external_api_client.py
-    http/external_api_schemas.py
-db/init/                SQL executado na 1ª subida do banco (extensões, fila, tabela item)
+    http/external_api_schemas.py   formato da API de terceiros (wire de adapter)
+db/init/                       SQL executado na 1ª subida do banco
+  01-extensions.sql            vector, pgmq e fila default
+  02-item.sql                  tabela item
 docker/postgres.Dockerfile     pgvector:pg17 + PGMQ compilado do fonte
-Dockerfile              imagem da API (python 3.13)
-docker-compose.yml      serviços db + api
+Dockerfile                     imagem da API (python 3.13)
+docker-compose.yml             serviços db + api
+Makefile                       atalhos: install, up, down, reset, db, run, test*, lint
+pyproject.toml                 config de pytest, ruff e mypy
+requirements.txt               dependências de runtime
+requirements-dev.txt           runtime + pytest, respx, ruff, mypy
+.env.example                   modelo do .env
 tests/
-  fakes.py              implementações fake dos ports
-  unit/                 services, wires e adapters (com mocks/respx)
-  acceptance/           endpoints via ASGI com dependency_overrides (sem banco)
-  integration/          repository e endpoints contra o Postgres real
+  fakes.py                     implementações fake dos ports
+  unit/                        services, wires e adapters (com mocks/respx)
+  acceptance/                  endpoints via ASGI com dependency_overrides (sem banco)
+  integration/                 repository e endpoints contra o Postgres real
 ```
 
 ---
