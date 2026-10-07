@@ -14,6 +14,7 @@ from app.adapters.ai.gemini_adapter import (
     GeminiRetry,
     ask,
     ask_with_config,
+    close_client,
     create_client,
     extract_invoice,
     to_http_options,
@@ -226,3 +227,12 @@ async def test_client_does_not_retry_client_errors() -> None:
         await ask(create_client("key", FAST_RETRY), "gemini-x", NO_PRICING, "prompt")
 
     assert route.call_count == 1
+
+
+async def test_close_client_closes_async_session() -> None:
+    aclose = AsyncMock()
+    client = SimpleNamespace(aio=SimpleNamespace(aclose=aclose))
+
+    await close_client(client)  # type: ignore[arg-type]
+
+    aclose.assert_awaited_once()

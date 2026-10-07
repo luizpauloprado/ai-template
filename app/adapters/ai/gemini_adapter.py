@@ -43,6 +43,10 @@ def create_client(api_key: str, retry: GeminiRetry | None = None) -> genai.Clien
     return genai.Client(api_key=api_key, http_options=to_http_options(retry or GeminiRetry()))
 
 
+async def close_client(client: genai.Client) -> None:
+    await client.aio.aclose()
+
+
 def to_sdk_config(config: GenerationConfig) -> types.GenerateContentConfig:
     return types.GenerateContentConfig(**config.model_dump(exclude_none=True))
 

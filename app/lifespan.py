@@ -47,5 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         logger.info("shutting down")
+        if app.state.gemini_client is not None:
+            await gemini_adapter.close_client(app.state.gemini_client)
         await app.state.http_client.aclose()
         await postgres_adapter.close_pool(app.state.db_pool)
